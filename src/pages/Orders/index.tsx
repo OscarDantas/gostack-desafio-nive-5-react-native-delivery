@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Image } from 'react-native';
+import { Alert, Image } from 'react-native';
 
 import api from '../../services/api';
 import formatValue from '../../utils/formatValue';
@@ -32,7 +32,18 @@ const Orders: React.FC = () => {
 
   useEffect(() => {
     async function loadOrders(): Promise<void> {
-      // Load orders from API
+      try {
+        const { data: foodsData } = await api.get('/orders');
+
+        setOrders(
+          foodsData.map((order: Food) => ({
+            ...order,
+            formattedPrice: formatValue(order.price),
+          })),
+        );
+      } catch (err) {
+        Alert.alert('Erro na listagem dos pedidos, tente novamente.');
+      }
     }
 
     loadOrders();

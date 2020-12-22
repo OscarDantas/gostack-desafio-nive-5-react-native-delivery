@@ -5,7 +5,7 @@ import React, {
   useMemo,
   useLayoutEffect,
 } from 'react';
-import { Image } from 'react-native';
+import { Alert, Image } from 'react-native';
 
 import Icon from 'react-native-vector-icons/Feather';
 import MaterialIcon from 'react-native-vector-icons/MaterialIcons';
@@ -56,7 +56,9 @@ interface Food {
   description: string;
   price: number;
   image_url: string;
+  thumbnail_url: string;
   formattedPrice: string;
+  category: number;
   extras: Extra[];
 }
 
@@ -73,38 +75,126 @@ const FoodDetails: React.FC = () => {
 
   useEffect(() => {
     async function loadFood(): Promise<void> {
-      // Load a specific food with extras based on routeParams id
+      try {
+        const { data: foodData } = await api.get(`/foods/${routeParams.id}`);
+
+        setFood({
+          ...foodData,
+          formattedPrice: formatValue(foodData.price),
+        });
+
+        setExtras(
+          foodData.extras.map((extra: Omit<Extra, 'quantity'>) => ({
+            ...extra,
+            quantity: 0,
+          })),
+        );
+      } catch (err) {
+        Alert.alert('Erro ao carregar o plato, tente novamente.');
+      }
     }
 
     loadFood();
   }, [routeParams]);
 
+  useEffect(() => {
+    async function loadFavorite(): Promise<void> {
+      if (routeParams) {
+        try {
+          const { data: favoriteData } = await api.get(
+            `favorites/${routeParams.id}`,
+          );
+
+          if (favoriteData) {
+            setIsFavorite(true);
+          }
+        } catch (err) {
+          setIsFavorite(false);
+        }
+      }
+    }
+    loadFavorite();
+  }, [routeParams]);
+
   function handleIncrementExtra(id: number): void {
-    // Increment extra quantity
+    setExtras(
+      extras.map(extra =>
+        extra.id === id ? { ...extra, quantity: extra.quantity + 1 } : extra,
+      ),
+    );
   }
 
   function handleDecrementExtra(id: number): void {
-    // Decrement extra quantity
+    setExtras(
+      extras.map(extra =>
+        extra.id === id && extra.quantity > 0
+          ? {
+              ...extra,
+              quantity: extra.quantity - 1,
+            }
+          : extra,
+      ),
+    );
   }
 
   function handleIncrementFood(): void {
-    // Increment food quantity
+    setFoodQuantity(foodQuantity + 1);
   }
 
   function handleDecrementFood(): void {
-    // Decrement food quantity
+    if (foodQuantity > 1) {
+      setFoodQuantity(foodQuantity - 1);
+    }
   }
 
   const toggleFavorite = useCallback(() => {
-    // Toggle if food is favorite or not
+    if (isFavorite) {
+      api.delete(`/favorites/${food.id}`);
+    } else {
+      api.post('/favorites', food);
+    }
+
+    setIsFavorite(!isFavorite);
   }, [isFavorite, food]);
 
   const cartTotal = useMemo(() => {
-    // Calculate cartTotal
+    const extraTotal = extras.reduce((accumulator, extra) => {
+      return accumulator + extra.quantity * extra.value;
+    }, 0);
+
+    return formatValue((extraTotal + food.price) * foodQuantity);
   }, [extras, food, foodQuantity]);
 
   async function handleFinishOrder(): Promise<void> {
-    // Finish the order and save on the API
+    try {
+      const {
+        id: product_id,
+        name,
+        description,
+        category,
+        thumbnail_url,
+      } = food;
+
+      const extraTotal = extras.reduce((accumulator, extra) => {
+        return accumulator + extra.quantity * extra.value;
+      }, 0);
+
+      await api.post('orders', {
+        product_id,
+        name,
+        description,
+        price: (extraTotal + food.price) * foodQuantity,
+        category,
+        thumbnail_url,
+        extras,
+      });
+
+      Alert.alert('Pedido realizado com sucesso!');
+
+      navigation.navigate('DashboardStack');
+    } catch (err) {
+      Alert.alert('Erro ao realizar o pedido, tente novamente.');
+    }
   }
 
   // Calculate the correct icon name
